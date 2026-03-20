@@ -1,8 +1,20 @@
 import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { View, ActivityIndicator, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '../src/lib/supabase';
 import { Session } from '@supabase/supabase-js';
-import { View, ActivityIndicator } from 'react-native';
+
+// CONFIGURACIÓN DE NOTIFICACIONES
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true, 
+    shouldShowList: true,
+  }),
+});
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
@@ -15,18 +27,28 @@ export default function RootLayout() {
       setInitialized(true);
     });
 
-    // 2. Escuchar cambios de auth
+    // 2. Escuchar cambios de autenticación
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setInitialized(true);
     });
+
+    // 3. Configuración de canal para Android
+    if (Platform.OS === 'android') {
+      Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    }
 
     return () => authListener.subscription.unsubscribe();
   }, []);
 
   if (!initialized) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
         <ActivityIndicator size="large" color="#000" />
       </View>
     );
@@ -34,23 +56,35 @@ export default function RootLayout() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      {/* Si NO hay sesión, mostramos Login. Si HAY, mostramos el Tabs */}
       {!session ? (
-        <Stack.Screen name="(auth)/login" options={{ title: 'Iniciar Sesión' }} />
+        // RUTAS PARA USUARIOS NO AUTENTICADOS
+        <>
+          <Stack.Screen 
+            name="(auth)/login" 
+            options={{ title: 'Login', animation: 'fade' }} 
+          />
+          <Stack.Screen 
+            name="(auth)/register" 
+            options={{ title: 'Registro', animation: 'slide_from_right' }} 
+          />
+        </>
       ) : (
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        // RUTAS PARA USUARIOS AUTENTICADOS
+        <>
+          <Stack.Screen 
+            name="(tabs)" 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="editor/[type]" 
+            options={{ 
+              presentation: 'modal', 
+              headerShown: true, 
+              title: 'Nueva Obra' 
+            }} 
+          />
+        </>
       )}
-      
-      {/* Rutas adicionales */}
-      <Stack.Screen name="(auth)/register" options={{ title: 'Registro' }} />
-      <Stack.Screen 
-        name="editor/[type]" 
-        options={{ 
-          presentation: 'modal', 
-          headerShown: true, 
-          title: 'Nuevo Escrito' 
-        }} 
-      />
     </Stack>
   );
 }
