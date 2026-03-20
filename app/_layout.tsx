@@ -1,77 +1,71 @@
 import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { supabase } from '../src/lib/supabase';
 import { Session } from '@supabase/supabase-js';
-
-// Configuración de notificaciones
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+import { View, ActivityIndicator } from 'react-native';
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
+    // Verificamos si hay una sesión activa al abrir la app
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setInitialized(true);
     });
 
+    // Escuchamos cambios en la autenticación (Login/Logout)
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      setInitialized(true);
     });
-
-    if (Platform.OS === 'android') {
-      Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
-    }
 
     return () => authListener.subscription.unsubscribe();
   }, []);
 
+  // Mientras verificamos la sesión, mostramos un cargador
   if (!initialized) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#000" />
+        <ActivityIndicator size="large" color="#007AFF" />
       </View>
     );
   }
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      {/* IMPORTANTE: Eliminamos los fragmentos <> y listamos las pantallas directamente.
-         Expo Router decidirá cuál mostrar basándose en la lógica del condicional.
-      */}
       {!session ? (
-        <Stack.Screen name="(auth)/login" options={{ title: 'Login' }} />
+        // RUTA PROTEGIDA: Si no hay sesión, solo mostramos Login/Register
+        <>
+          <Stack.Screen name="(auth)/login" options={{ title: 'Iniciar Sesión' }} />
+          <Stack.Screen name="(auth)/register" options={{ title: 'Registro' }} />
+        </>
       ) : (
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        // RUTA PRIVADA: Si hay sesión, habilitamos las Tabs y modales
+        <>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          
+          {/* PANTALLA DEL EDITOR (MODAL) */}
+          <Stack.Screen 
+            name="editor/[type]" 
+            options={{ 
+              presentation: 'modal',
+              headerShown: true,
+              title: 'Nueva Obra'
+            }} 
+          />
+
+          {/* NUEVA PANTALLA DE LECTURA QR (MODAL) */}
+          <Stack.Screen 
+            name="reader/[id]" 
+            options={{ 
+              presentation: 'modal', 
+              animation: 'slide_from_bottom',
+              headerShown: false 
+            }} 
+          />
+        </>
       )}
-      
-      {/* Pantallas comunes o que no dependen del estado de login inmediato */}
-      <Stack.Screen name="(auth)/register" options={{ title: 'Registro' }} />
-      <Stack.Screen 
-        name="editor/[type]" 
-        options={{ 
-          presentation: 'modal', 
-          headerShown: true, 
-          title: 'Nueva Obra' 
-        }} 
-      />
     </Stack>
   );
 }
